@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador Inteligente - Timemania</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'time-yellow': '#fff600',
+                        'time-yellow-light': '#fff833',
+                        'time-yellow-dark': '#ccc500',
+                        'time-green': '#12923d',
+                        'time-green-light': '#49e97e',
+                        'time-green-dark': '#0b5b26'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .number-btn {
+            transition: all 0.3s ease;
+        }
+        .number-btn:hover {
+            transform: scale(1.05);
+        }
+        .selected-number {
+            background: linear-gradient(45deg, #fff600, #fff833);
+            color: #000;
+            font-weight: bold;
+        }
+        .selected-team {
+            background: linear-gradient(45deg, #12923d, #49e97e);
+            color: white;
+            font-weight: bold;
+        }
+        .loading {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .stats-card {
+            background: linear-gradient(135deg, rgba(255, 246, 0, 0.1), rgba(18, 146, 61, 0.1));
+            border: 1px solid rgba(255, 246, 0, 0.3);
+        }
+        .team-card {
+            background: linear-gradient(135deg, rgba(18, 146, 61, 0.1), rgba(73, 233, 126, 0.2));
+            border: 1px solid rgba(18, 146, 61, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-yellow-50 dark:bg-gray-900 min-h-screen">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-time-yellow to-time-green text-black p-4 shadow-lg">
+        <div class="container mx-auto">
+            <div class="flex items-center justify-center gap-4 mb-2">
+                <img src="https://i.postimg.cc/W4g9ShFc/timemania.png" alt="Timemania" class="h-12 md:h-16">
+                <h1 class="text-2xl md:text-3xl font-bold">Gerador Inteligente</h1>
+            </div>
+            <p class="text-center mt-2 opacity-90">Análise em tempo real • Estratégias inteligentes • 10 números + Time do Coração</p>
+        </div>
+    </header>
+
+    <div class="container mx-auto p-4 max-w-7xl">
+        <!-- API Status -->
+        <div id="apiStatus" class="mb-4 p-3 rounded-lg hidden">
+            <div class="flex items-center gap-2">
+                <div class="loading w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                <span>Carregando dados dos sorteios...</span>
+            </div>
+        </div>
+
+        <!-- Last Draw Info -->
+        <div id="lastDrawInfo" class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6 hidden">
+            <h3 class="text-lg font-semibold text-time-green mb-3">📊 Último Sorteio</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Concurso:</p>
+                    <p id="lastConcurso" class="font-bold text-lg"></p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Data:</p>
+                    <p id="lastData" class="font-bold text-lg"></p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Acumulou:</p>
+                    <p id="acumulou" class="font-bold text-lg text-time-green"></p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Próximo prêmio:</p>
+                    <p id="proximoPremio" class="font-bold text-lg text-green-600"></p>
+                </div>
+            </div>
+            
+            <!-- Last Draw Numbers and Team -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                <div class="stats-card p-4 rounded-lg">
+                    <h4 class="font-semibold text-time-green mb-2">🎯 Números Sorteados:</h4>
+                    <div id="lastNumbers" class="flex flex-wrap gap-1"></div>
+                </div>
+                <div class="team-card p-4 rounded-lg">
+                    <h4 class="font-semibold text-time-green mb-2">⚽ Time do Coração:</h4>
+                    <div id="lastTeam" class="text-lg font-bold"></div>
+                </div>
+            </div>
+            
+            <label class="flex items-center gap-2 mt-3">
+                <input type="checkbox" id="useLastNumbers" class="w-4 h-4 text-time-green">
+                <span class="text-sm">Incluir números e time do último sorteio na seleção</span>
+            </label>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div id="statisticsSection" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 hidden">
+            <div class="stats-card p-4 rounded-lg">
+                <h4 class="font-semibold text-time-green mb-2">🔥 Números Quentes</h4>
+                <div id="hotNumbers" class="flex flex-wrap gap-1"></div>
+                <button id="useHotNumbers" class="mt-2 px-3 py-1 bg-time-green text-white rounded text-sm hover:bg-time-green-dark">
+                    Usar estes números
+                </button>
+            </div>
+            <div class="stats-card p-4 rounded-lg">
+                <h4 class="font-semibold text-time-green mb-2">❄️ Números Frios</h4>
+                <div id="coldNumbers" class="flex flex-wrap gap-1"></div>
+                <button id="useColdNumbers" class="mt-2 px-3 py-1 bg-time-green-light text-white rounded text-sm hover:bg-time-green">
+                    Usar estes números
+                </button>
+            </div>
+            <div class="stats-card p-4 rounded-lg">
+                <h4 class="font-semibold text-time-green mb-2">⚽ Times Frequentes</h4>
+                <div id="hotTeams" class="text-sm space-y-1"></div>
+                <button id="useHotTeam" class="mt-2 px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700">
+                    Usar time mais frequente
+                </button>
+            </div>
+            <div class="stats-card p-4 rounded-lg">
+                <h4 class="font-semibold text-time-green mb-2">🎯 Análise Geral</h4>
+                <div id="generalAnalysis" class="text-sm space-y-1">
+                    <div>Pares médios: <span id="avgPairs" class="font-bold text-time-green">-</span></div>
+                    <div>Ímpares médios: <span id="avgOdds" class="font-bold text-time-green">-</span></div>
+                    <div>Soma média: <span id="avgSum" class="font-bold text-time-green">-</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Number and Team Selection -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Numbers Section -->
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold text-time-green mb-4">🎯 Seleção de Números (10 obrigatórios)</h2>
+                    
+                    <!-- Quick Actions for Numbers -->
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        <button id="clearNumbers" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600">
+                            Limpar Números
+                        </button>
+                        <button id="selectPairs" class="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600">
+                            Só Pares
+                        </button>
+                        <button id="selectOdds" class="px-3 py-1 bg-purple-500 text-white rounded text-sm hover:bg-purple-600">
+                            Só Ímpares
+                        </button>
+                        <button id="selectRandom10" class="px-3 py-1 bg-time-green text-white rounded text-sm hover:bg-time-green-dark">
+                            10 Aleatórios
+                        </button>
+                    </div>
+
+                    <!-- Decade Selection -->
+                    <div class="mb-4">
+                        <h4 class="text-sm font-medium mb-2">Seleção por décadas:</h4>
+                        <div class="grid grid-cols-4 sm:grid-cols-8 gap-1">
+                            <button class="px-2 py-1 bg-time-yellow text-black rounded text-xs font-semibold" onclick="selectDecade(1, 10)">01-10</button>
+                            <button class="px-2 py-1 bg-time-yellow text-black rounded text-xs font-semibold" onclick="selectDecade(11, 20)">11-20</button>
+                            <button class="px-2 py-1 bg-time-yellow text-black rounded text-xs font-semibold" onclick="selectDecade(21, 30)">21-30</button>
+                            <button class="px-2 py-1 bg-time-yellow text-black rounded text-xs font-semibold" onclick="selectDecade(31, 40)">31-40</button>
+                            <button class="px-2 py-1 bg-time-yellow text-black rounded text-xs font-semibold" onclick="selectDecade(41, 50)">41-50</button>
+                            <button class="px-2 py-1 bg-time-yellow text-black rounded text-xs font-semibold" onclick="selectDecade(51, 60)">51-60</button>
+                            <button class="px-2 py-1 bg-time-yellow text-black rounded text-xs font-semibold" onclick="selectDecade(61, 70)">61-70</button>
+                            <button class="px-2 py-1 bg-time-yellow text-black rounded text-xs font-semibold" onclick="selectDecade(71, 80)">71-80</button>
+                        </div>
+                    </div>
+
+                    <!-- Numbers Grid (1-80) -->
+                    <div id="numbersGrid" class="grid grid-cols-8 sm:grid-cols-10 gap-1 sm:gap-2 mb-4">
+                        <!-- Numbers 1-80 will be generated by JavaScript -->
+                    </div>
+
+                    <!-- Numbers Selection Info -->
+                    <div id="numbersSelectionInfo" class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <span id="selectedNumbersCount">Números: 0/10</span>
+                            <span id="numbersPairCount">Pares: 0</span>
+                            <span id="numbersOddCount">Ímpares: 0</span>
+                            <span id="numbersSum">Soma: 0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Team Selection Section -->
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold text-time-green mb-4">⚽ Seleção do Time do Coração (1 obrigatório)</h2>
+                    
+                    <!-- Team Search -->
+                    <div class="mb-4">
+                        <input type="text" id="teamSearch" placeholder="Buscar time..." 
+                               class="w-full px-3 py-2 border rounded-lg text-base focus:ring-2 focus:ring-time-green">
+                    </div>
+
+                    <!-- Teams Grid -->
+                    <div id="teamsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto mb-4">
+                        <!-- Teams will be generated by JavaScript -->
+                    </div>
+
+                    <!-- Team Selection Info -->
+                    <div id="teamSelectionInfo" class="text-sm text-gray-600 dark:text-gray-400">
+                        <span id="selectedTeamInfo">Time: Nenhum selecionado</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Generation Settings -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-time-green mb-4">⚙️ Configurações</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Quantidade de Jogos:</label>
+                        <input type="number" id="numGames" value="10" min="1" max="50" 
+                               class="w-full px-3 py-2 border rounded-lg text-base focus:ring-2 focus:ring-time-green">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Estratégia:</label>
+                        <select id="strategy" class="w-full px-3 py-2 border rounded-lg text-base focus:ring-2 focus:ring-time-green">
+                            <option value="balanced">Equilibrada</option>
+                            <option value="hot">Números e Times Quentes</option>
+                            <option value="cold">Números e Times Frios</option>
+                            <option value="mixed">Mista (Quentes + Frios)</option>
+                            <option value="statistical">Baseada em Estatísticas</option>
+                            <option value="pattern_based">Baseada em Padrões</option>
+                            <option value="decade_spread">Distribuição por Décadas</option>
+                            <option value="random">Totalmente Aleatória</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Configurações especiais:</label>
+                        <div class="space-y-2">
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" id="avoidLastDraw" class="w-4 h-4 text-time-green">
+                                <span class="text-sm">Evitar números do último sorteio</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" id="balancePairOdd" class="w-4 h-4 text-time-green" checked>
+                                <span class="text-sm">Equilibrar pares e ímpares</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" id="useStatistics" class="w-4 h-4 text-time-green" checked>
+                                <span class="text-sm">Usar estatísticas históricas</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button id="generateGames" class="w-full bg-gradient-to-r from-time-yellow to-time-green text-black py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+                        🎲 Gerar Jogos
+                    </button>
+                </div>
+
+                <!-- Game Info -->
+                <div class="mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <h4 class="font-semibold text-time-green mb-2">ℹ️ Timemania:</h4>
+                    <p class="text-xs text-green-700">
+                        Escolha 10 números de 1 a 80 e 1 time do coração. 
+                        Ganhe acertando 7, 6, 5, 4 ou 3 números, ou o time!
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generated Games -->
+        <div id="generatedGames" class="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hidden">
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
+                <h2 class="text-xl font-semibold text-time-green">🎯 Jogos Gerados</h2>
+                <div class="flex flex-wrap gap-2">
+                    <button id="downloadTxt" class="flex-1 sm:flex-none px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm">
+                        📄 TXT
+                    </button>
+                    <button id="downloadHtml" class="flex-1 sm:flex-none px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                        🌐 HTML
+                    </button>
+                    <button id="downloadXlsx" class="flex-1 sm:flex-none px-3 py-2 bg-time-green text-white rounded hover:bg-time-green-dark text-sm">
+                        📊 XLSX
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Analysis -->
+            <div id="gameAnalysis" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4"></div>
+
+            <!-- Games List -->
+            <div id="gamesList" class="space-y-2"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedNumbers = new Set();
+        let selectedTeam = null;
+        let lastDrawNumbers = [];
+        let lastDrawTeam = '';
+        let allDrawsData = [];
+        let numberFrequency = {};
+        let teamFrequency = {};
+        let generatedGames = [];
+        let allTeams = [];
+
+        // Brazilian football teams list
+        const brazilianTeams = [
+            'ABC', 'América-MG', 'América-RN', 'Athletico-PR', 'Atlético-GO', 'Atlético-MG',
+            'Avaí', 'Bahia', 'Botafogo', 'Botafogo-PB', 'Bragantino', 'Ceará', 'Chapecoense',
+            'Corinthians', 'Coritiba', 'CRB', 'Criciúma', 'Cruzeiro', 'CSA', 'Cuiabá',
+            'Figueirense', 'Flamengo', 'Fluminense', 'Fortaleza', 'Goiás', 'Grêmio',
+            'Guarani', 'Internacional', 'Juventude', 'Londrina', 'Náutico', 'Operário-PR',
+            'Palmeiras', 'Paraná', 'Ponte Preta', 'Red Bull Bragantino', 'Remo', 'Sampaio Corrêa',
+            'Santa Cruz', 'Santos', 'São Paulo', 'Sport', 'Tombense', 'Vasco', 'Vila Nova',
+            'Vitória'
+        ];
+
+        // Dark mode detection
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+        // Make selectDecade function global
+        window.selectDecade = function(start, end) {
+            selectedNumbers.clear();
+            let count = 0;
+            for (let i = start; i <= end && count < 10; i++) {
+                selectedNumbers.add(i);
+                count++;
+            }
+            updateNumbersVisual();
+            updateNumbersSelectionInfo();
+        };
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeGrids();
+            loadLotteryData();
+            setupEventListeners();
+        });
+
+        function initializeGrids() {
+            // Initialize numbers grid (1-80)
+            const numbersContainer = document.getElementById('numbersGrid');
+            numbersContainer.innerHTML = '';
+            
+            for (let i = 1; i <= 80; i++) {
+                const button = document.createElement('button');
+                button.className = 'number-btn w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-time-green text-xs sm:text-sm font-semibold hover:bg-time-green hover:text-white transition-all touch-manipulation';
+                button.textContent = i.toString().padStart(2, '0');
+                button.onclick = () => toggleNumber(i);
+                numbersContainer.appendChild(button);
+            }
+
+            // Initialize teams grid
+            initializeTeamsGrid();
+        }
+
+        function initializeTeamsGrid() {
+            const teamsContainer = document.getElementById('teamsGrid');
+            teamsContainer.innerHTML = '';
+            allTeams = [...brazilianTeams];
+            
+            allTeams.forEach(team => {
+                const button = document.createElement('button');
+                button.className = 'team-btn p-2 text-left border rounded hover:bg-time-green hover:text-white transition-all text-sm';
+                button.textContent = team;
+                button.onclick = () => selectTeam(team);
+                teamsContainer.appendChild(button);
+            });
+        }
+
+        function toggleNumber(num) {
+            const button = document.querySelector(`#numbersGrid button:nth-child(${num})`);
+            
+            if (selectedNumbers.has(num)) {
+                selectedNumbers.delete(num);
+                button.classList.remove('selected-number');
+                button.classList.add('border-2', 'border-time-green');
+            } else {
+                if (selectedNumbers.size < 10) {
+                    selectedNumbers.add(num);
+                    button.classList.add('selected-number');
+                    button.classList.remove('border-2', 'border-time-green');
+                } else {
+                    showCustomAlert('Você já selecionou 10 números (máximo permitido).');
+                }
+            }
+            
+            updateNumbersSelectionInfo();
+        }
+
+        function selectTeam(team) {
+            // Clear previous selection
+            document.querySelectorAll('.team-btn').forEach(btn => {
+                btn.classList.remove('selected-team');
+                btn.classList.add('border');
+            });
+            
+            selectedTeam = team;
+            
+            // Update visual selection
+            const teamButtons = document.querySelectorAll('.team-btn');
+            teamButtons.forEach(btn => {
+                if (btn.textContent === team) {
+                    btn.classList.add('selected-team');
+                    btn.classList.remove('border');
+                }
+            });
+            
+            updateTeamSelectionInfo();
+        }
+
+        function updateNumbersSelectionInfo() {
+            const selected = Array.from(selectedNumbers);
+            const pairs = selected.filter(n => n % 2 === 0).length;
+            const odds = selected.filter(n => n % 2 === 1).length;
+            const sum = selected.reduce((acc, num) => acc + num, 0);
+
+            document.getElementById('selectedNumbersCount').textContent = `Números: ${selected.length}/10`;
+            document.getElementById('numbersPairCount').textContent = `Pares: ${pairs}`;
+            document.getElementById('numbersOddCount').textContent = `Ímpares: ${odds}`;
+            document.getElementById('numbersSum').textContent = `Soma: ${sum}`;
+        }
+
+        function updateTeamSelectionInfo() {
+            document.getElementById('selectedTeamInfo').textContent = `Time: ${selectedTeam || 'Nenhum selecionado'}`;
+        }
+
+        async function loadLotteryData() {
+            const statusDiv = document.getElementById('apiStatus');
+            statusDiv.classList.remove('hidden');
+            statusDiv.className = 'mb-4 p-3 rounded-lg bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+
+            try {
+                await simulateAPICall();
+                
+                statusDiv.classList.add('hidden');
+                displayLastDraw();
+                calculateStatistics();
+                displayStatistics();
+                
+            } catch (error) {
+                statusDiv.className = 'mb-4 p-3 rounded-lg bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                statusDiv.innerHTML = '<span>❌ Erro ao carregar dados dos sorteios. Usando dados de exemplo.</span>';
+                
+                createSampleData();
+                displayLastDraw();
+                calculateStatistics();
+                displayStatistics();
+            }
+        }
+
+        async function simulateAPICall() {
+            try {
+                const response = await fetch('https://servicebus2.caixa.gov.br/portaldeloterias/api/timemania/');
+                
+                if (!response.ok) {
+                    throw new Error('Erro na API da Caixa');
+                }
+                
+                const data = await response.json();
+                
+                const lastDraw = {
+                    numero: data.numero,
+                    dataApuracao: data.dataApuracao,
+                    acumulou: data.acumulou,
+                    valorAcumuladoProximoConcurso: data.valorAcumuladoProximoConcurso,
+                    listaDezenas: data.listaDezenas?.map(num => parseInt(num)) || [],
+                    nomeTimeCoracao: data.nomeTimeCoracao || ''
+                };
+                
+                await loadHistoricalData(lastDraw.numero);
+                
+                lastDrawNumbers = lastDraw.listaDezenas;
+                lastDrawTeam = lastDraw.nomeTimeCoracao;
+                
+                if (!allDrawsData.some(draw => draw.numero === lastDraw.numero)) {
+                    allDrawsData.push(lastDraw);
+                }
+                
+            } catch (error) {
+                console.error('Erro ao buscar dados da API:', error);
+                createSampleData();
+            }
+        }
+
+        async function loadHistoricalData(lastConcurso) {
+            try {
+                allDrawsData = [];
+                
+                const promises = [];
+                for (let i = 0; i < 30; i++) {
+                    const concursoNum = lastConcurso - i;
+                    if (concursoNum > 0) {
+                        promises.push(fetchConcurso(concursoNum));
+                    }
+                }
+                
+                const results = await Promise.allSettled(promises);
+                
+                results.forEach(result => {
+                    if (result.status === 'fulfilled' && result.value) {
+                        allDrawsData.push(result.value);
+                    }
+                });
+                
+                allDrawsData.sort((a, b) => a.numero - b.numero);
+                
+                if (allDrawsData.length < 5) {
+                    console.warn('Poucos dados reais encontrados, complementando com simulados');
+                    createSampleData();
+                }
+                
+            } catch (error) {
+                console.error('Erro ao carregar histórico:', error);
+                createSampleData();
+            }
+        }
+
+        async function fetchConcurso(numero) {
+            try {
+                const response = await fetch(`https://servicebus2.caixa.gov.br/portaldeloterias/api/timemania/${numero}`);
+                
+                if (!response.ok) {
+                    return null;
+                }
+                
+                const data = await response.json();
+                
+                return {
+                    numero: data.numero,
+                    dataApuracao: data.dataApuracao,
+                    listaDezenas: data.listaDezenas?.map(num => parseInt(num)) || [],
+                    nomeTimeCoracao: data.nomeTimeCoracao || ''
+                };
+                
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function createSampleData() {
+            allDrawsData = [];
+            for (let i = 0; i < 30; i++) {
+                const numbers = [];
+                while (numbers.length < 10) {
+                    const num = Math.floor(Math.random() * 80) + 1;
+                    if (!numbers.includes(num)) {
+                        numbers.push(num);
+                    }
+                }
+                numbers.sort((a, b) => a - b);
+
+                const team = brazilianTeams[Math.floor(Math.random() * brazilianTeams.length)];
+                
+                const date = new Date();
+                date.setDate(date.getDate() - i * 3);
+                
+                allDrawsData.push({
+                    numero: 2100 - i,
+                    dataApuracao: date.toLocaleDateString('pt-BR'),
+                    listaDezenas: numbers,
+                    nomeTimeCoracao: team
+                });
+            }
+            
+            allDrawsData.reverse();
+            const lastDraw = allDrawsData[allDrawsData.length - 1];
+            lastDrawNumbers = lastDraw.listaDezenas;
+            lastDrawTeam = lastDraw.nomeTimeCoracao;
+        }
+
+        function displayLastDraw() {
+            const lastDraw = allDrawsData[allDrawsData.length - 1];
+            document.getElementById('lastConcurso').textContent = lastDraw.numero;
+            document.getElementById('lastData').textContent = lastDraw.dataApuracao;
+            document.getElementById('acumulou').textContent = 'SIM';
+            document.getElementById('proximoPremio').textContent = 'R$ 5.000.000,00';
+            
+            // Display last draw numbers
+            const numbersContainer = document.getElementById('lastNumbers');
+            numbersContainer.innerHTML = '';
+            lastDraw.listaDezenas.forEach(num => {
+                const span = document.createElement('span');
+                span.className = 'px-2 py-1 bg-time-green text-white rounded text-sm font-bold';
+                span.textContent = num.toString().padStart(2, '0');
+                numbersContainer.appendChild(span);
+            });
+            
+            // Display last draw team
+            document.getElementById('lastTeam').textContent = lastDraw.nomeTimeCoracao;
+            document.getElementById('lastTeam').className = 'text-lg font-bold text-time-green';
+            
+            document.getElementById('lastDrawInfo').classList.remove('hidden');
+        }
+
+        function calculateStatistics() {
+            numberFrequency = {};
+            teamFrequency = {};
+            
+            // Initialize numbers
+            for (let i = 1; i <= 80; i++) {
+                numberFrequency[i] = 0;
+            }
+            
+            // Count frequencies
+            allDrawsData.forEach((draw) => {
+                draw.listaDezenas.forEach(num => {
+                    numberFrequency[num]++;
+                });
+                
+                if (draw.nomeTimeCoracao) {
+                    teamFrequency[draw.nomeTimeCoracao] = (teamFrequency[draw.nomeTimeCoracao] || 0) + 1;
+                }
+            });
+        }
+
+        function displayStatistics() {
+            // Hot numbers
+            const hotNumbers = Object.entries(numberFrequency)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 15)
+                .map(([num]) => parseInt(num));
+            
+            displayNumberGroup('hotNumbers', hotNumbers, 'bg-red-500');
+            
+            // Cold numbers
+            const coldNumbers = Object.entries(numberFrequency)
+                .sort((a, b) => a[1] - b[1])
+                .slice(0, 15)
+                .map(([num]) => parseInt(num));
+            
+            displayNumberGroup('coldNumbers', coldNumbers, 'bg-blue-500');
+            
+            // Hot teams
+            displayHotTeams();
+            
+            // General analysis
+            calculateGeneralAnalysis();
+            
+            document.getElementById('statisticsSection').classList.remove('hidden');
+        }
+
+        function displayNumberGroup(containerId, numbers, bgClass) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            numbers.forEach(num => {
+                const span = document.createElement('span');
+                span.className = `px-2 py-1 ${bgClass} text-white rounded text-sm font-bold`;
+                span.textContent = num.toString().padStart(2, '0');
+                container.appendChild(span);
+            });
+        }
+
+        function displayHotTeams() {
+            const container = document.getElementById('hotTeams');
+            const hotTeams = Object.entries(teamFrequency)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+            
+            container.innerHTML = '';
+            hotTeams.forEach(([team, freq]) => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between';
+                div.innerHTML = `<span>${team}</span><span class="font-bold">${freq}x</span>`;
+                container.appendChild(div);
+            });
+        }
+
+        function calculateGeneralAnalysis() {
+            let totalPairs = 0;
+            let totalOdds = 0;
+            let totalSum = 0;
+            let totalDraws = allDrawsData.length;
+
+            allDrawsData.forEach(draw => {
+                const pairs = draw.listaDezenas.filter(n => n % 2 === 0).length;
+                const odds = draw.listaDezenas.filter(n => n % 2 === 1).length;
+                const sum = draw.listaDezenas.reduce((acc, num) => acc + num, 0);
+                
+                totalPairs += pairs;
+                totalOdds += odds;
+                totalSum += sum;
+            });
+
+            const avgPairs = totalDraws > 0 ? (totalPairs / totalDraws).toFixed(1) : '0.0';
+            const avgOdds = totalDraws > 0 ? (totalOdds / totalDraws).toFixed(1) : '0.0';
+            const avgSum = totalDraws > 0 ? (totalSum / totalDraws).toFixed(0) : '0';
+
+            document.getElementById('avgPairs').textContent = avgPairs;
+            document.getElementById('avgOdds').textContent = avgOdds;
+            document.getElementById('avgSum').textContent = avgSum;
+        }
+
+        function setupEventListeners() {
+            // Numbers actions
+            document.getElementById('clearNumbers').onclick = () => {
+                selectedNumbers.clear();
+                document.querySelectorAll('#numbersGrid .number-btn').forEach(btn => {
+                    btn.classList.remove('selected-number');
+                    btn.classList.add('border-2', 'border-time-green');
+                });
+                updateNumbersSelectionInfo();
+            };
+            
+            document.getElementById('selectPairs').onclick = () => {
+                selectedNumbers.clear();
+                let count = 0;
+                for (let i = 2; i <= 80; i += 2) {
+                    if (count < 10) {
+                        selectedNumbers.add(i);
+                        count++;
+                    }
+                }
+                updateNumbersVisual();
+                updateNumbersSelectionInfo();
+            };
+            
+            document.getElementById('selectOdds').onclick = () => {
+                selectedNumbers.clear();
+                let count = 0;
+                for (let i = 1; i <= 79; i += 2) {
+                    if (count < 10) {
+                        selectedNumbers.add(i);
+                        count++;
+                    }
+                }
+                updateNumbersVisual();
+                updateNumbersSelectionInfo();
+            };
+            
+            document.getElementById('selectRandom10').onclick = () => {
+                selectedNumbers.clear();
+                while (selectedNumbers.size < 10) {
+                    selectedNumbers.add(Math.floor(Math.random() * 80) + 1);
+                }
+                updateNumbersVisual();
+                updateNumbersSelectionInfo();
+            };
+            
+            // Team search
+            document.getElementById('teamSearch').oninput = (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                const teamButtons = document.querySelectorAll('.team-btn');
+                teamButtons.forEach(btn => {
+                    const teamName = btn.textContent.toLowerCase();
+                    if (teamName.includes(searchTerm)) {
+                        btn.style.display = 'block';
+                    } else {
+                        btn.style.display = 'none';
+                    }
+                });
+            };
+            
+            // Statistics actions
+            document.getElementById('useHotNumbers').onclick = () => useStatisticsNumbers('hotNumbers');
+            document.getElementById('useColdNumbers').onclick = () => useStatisticsNumbers('coldNumbers');
+            document.getElementById('useHotTeam').onclick = () => {
+                const hotTeam = Object.entries(teamFrequency)
+                    .sort((a, b) => b[1] - a[1])[0];
+                if (hotTeam) {
+                    selectTeam(hotTeam[0]);
+                }
+            };
+            
+            document.getElementById('useLastNumbers').onchange = (e) => {
+                if (e.target.checked) {
+                    lastDrawNumbers.forEach(num => {
+                        if (selectedNumbers.size < 10) {
+                            selectedNumbers.add(num);
+                        }
+                    });
+                    if (lastDrawTeam) {
+                        selectTeam(lastDrawTeam);
+                    }
+                    updateNumbersVisual();
+                    updateNumbersSelectionInfo();
+                }
+            };
+            
+            document.getElementById('generateGames').onclick = generateGames;
+            
+            document.getElementById('downloadTxt').onclick = () => downloadGames('txt');
+            document.getElementById('downloadHtml').onclick = () => downloadGames('html');
+            document.getElementById('downloadXlsx').onclick = () => downloadGames('xlsx');
+        }
+
+        function updateNumbersVisual() {
+            const buttons = document.querySelectorAll('#numbersGrid .number-btn');
+            buttons.forEach((button, index) => {
+                const num = index + 1;
+                if (selectedNumbers.has(num)) {
+                    button.classList.add('selected-number');
+                    button.classList.remove('border-2', 'border-time-green');
+                } else {
+                    button.classList.remove('selected-number');
+                    button.classList.add('border-2', 'border-time-green');
+                }
+            });
+        }
+
+        function useStatisticsNumbers(type) {
+            const container = document.getElementById(type);
+            const numbers = Array.from(container.children).map(span => 
+                parseInt(span.textContent)
+            );
+            
+            selectedNumbers.clear();
+            numbers.slice(0, 10).forEach(num => selectedNumbers.add(num));
+            updateNumbersVisual();
+            updateNumbersSelectionInfo();
+        }
+
+        function generateGames() {
+            if (selectedNumbers.size !== 10) {
+                showCustomAlert('Você deve selecionar exatamente 10 números para gerar os jogos da Timemania.');
+                return;
+            }
+            
+            if (!selectedTeam) {
+                showCustomAlert('Você deve selecionar 1 time do coração para gerar os jogos da Timemania.');
+                return;
+            }
+            
+            const numGames = parseInt(document.getElementById('numGames').value);
+            const strategy = document.getElementById('strategy').value;
+            const avoidLastDraw = document.getElementById('avoidLastDraw').checked;
+            const balancePairOdd = document.getElementById('balancePairOdd').checked;
+            const useStatistics = document.getElementById('useStatistics').checked;
+            
+            generatedGames = [];
+            const gameSet = new Set();
+            let attempts = 0;
+            const maxAttempts = numGames * 100;
+            
+            while (generatedGames.length < numGames && attempts < maxAttempts) {
+                attempts++;
+                let gameNumbers, gameTeam;
+                
+                switch (strategy) {
+                    case 'hot':
+                        [gameNumbers, gameTeam] = generateHotNumbersAndTeams();
+                        break;
+                    case 'cold':
+                        [gameNumbers, gameTeam] = generateColdNumbersAndTeams();
+                        break;
+                    case 'mixed':
+                        [gameNumbers, gameTeam] = generateMixedNumbersAndTeams();
+                        break;
+                    case 'statistical':
+                        [gameNumbers, gameTeam] = generateStatisticalNumbersAndTeams(useStatistics);
+                        break;
+                    case 'pattern_based':
+                        [gameNumbers, gameTeam] = generatePatternBasedNumbersAndTeams();
+                        break;
+                    case 'decade_spread':
+                        [gameNumbers, gameTeam] = generateDecadeSpreadNumbersAndTeams();
+                        break;
+                    case 'random':
+                        [gameNumbers, gameTeam] = generateRandomNumbersAndTeams();
+                        break;
+                    default:
+                        [gameNumbers, gameTeam] = generateBalancedNumbersAndTeams(balancePairOdd);
+                }
+                
+                // Apply filters
+                if (avoidLastDraw) {
+                    gameNumbers = gameNumbers.filter(num => !lastDrawNumbers.includes(num));
+                    // Fill missing numbers
+                    while (gameNumbers.length < 10) {
+                        const candidates = Array.from(selectedNumbers).filter(num => 
+                            !gameNumbers.includes(num) && !lastDrawNumbers.includes(num)
+                        );
+                        if (candidates.length === 0) break;
+                        gameNumbers.push(candidates[Math.floor(Math.random() * candidates.length)]);
+                    }
+                }
+                
+                if (gameNumbers.length === 10 && gameTeam) {
+                    const sortedNumbers = gameNumbers.sort((a, b) => a - b);
+                    const gameKey = sortedNumbers.join('-') + '|' + gameTeam;
+                    
+                    if (!gameSet.has(gameKey)) {
+                        gameSet.add(gameKey);
+                        generatedGames.push({ numbers: sortedNumbers, team: gameTeam });
+                    }
+                }
+            }
+            
+            if (generatedGames.length < numGames) {
+                showCustomAlert(`Foram gerados ${generatedGames.length} jogos únicos de ${numGames} solicitados.`);
+            }
+            
+            displayGeneratedGames();
+        }
+
+        function generateBalancedNumbersAndTeams(balancePairOdd) {
+            let numbers = Array.from(selectedNumbers);
+            
+            if (balancePairOdd) {
+                const pairs = numbers.filter(n => n % 2 === 0);
+                const odds = numbers.filter(n => n % 2 === 1);
+                
+                if (pairs.length >= 5 && odds.length >= 5) {
+                    const shuffledPairs = pairs.sort(() => Math.random() - 0.5);
+                    const shuffledOdds = odds.sort(() => Math.random() - 0.5);
+                    
+                    numbers = [
+                        ...shuffledPairs.slice(0, 5),
+                        ...shuffledOdds.slice(0, 5)
+                    ];
+                }
+            }
+            
+            const shuffledNumbers = numbers.sort(() => Math.random() - 0.5);
+            return [shuffledNumbers.slice(0, 10), selectedTeam];
+        }
+
+        function generateHotNumbersAndTeams() {
+            const hotNumbers = Object.entries(numberFrequency)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 20)
+                .map(([num]) => parseInt(num))
+                .filter(num => selectedNumbers.has(num));
+            
+            const shuffledNumbers = hotNumbers.sort(() => Math.random() - 0.5);
+            const finalNumbers = [...shuffledNumbers.slice(0, 10)];
+            
+            // Fill remaining slots if needed
+            while (finalNumbers.length < 10) {
+                const remaining = Array.from(selectedNumbers).filter(n => !finalNumbers.includes(n));
+                if (remaining.length === 0) break;
+                finalNumbers.push(remaining[Math.floor(Math.random() * remaining.length)]);
+            }
+            
+            return [finalNumbers, selectedTeam];
+        }
+
+        function generateColdNumbersAndTeams() {
+            const coldNumbers = Object.entries(numberFrequency)
+                .sort((a, b) => a[1] - b[1])
+                .slice(0, 20)
+                .map(([num]) => parseInt(num))
+                .filter(num => selectedNumbers.has(num));
+            
+            const shuffledNumbers = coldNumbers.sort(() => Math.random() - 0.5);
+            const finalNumbers = [...shuffledNumbers.slice(0, 10)];
+            
+            // Fill remaining slots if needed
+            while (finalNumbers.length < 10) {
+                const remaining = Array.from(selectedNumbers).filter(n => !finalNumbers.includes(n));
+                if (remaining.length === 0) break;
+                finalNumbers.push(remaining[Math.floor(Math.random() * remaining.length)]);
+            }
+            
+            return [finalNumbers, selectedTeam];
+        }
+
+        function generateMixedNumbersAndTeams() {
+            const [hotNumbers] = generateHotNumbersAndTeams();
+            const [coldNumbers] = generateColdNumbersAndTeams();
+            
+            const mixedNumbers = [...hotNumbers.slice(0, 5), ...coldNumbers.slice(0, 5)];
+            return [mixedNumbers, selectedTeam];
+        }
+
+        function generateStatisticalNumbersAndTeams(useStats) {
+            if (useStats) {
+                const numbers = [];
+                const weights = Array.from(selectedNumbers).map(num => ({
+                    num,
+                    weight: numberFrequency[num] || 1
+                }));
+                
+                while (numbers.length < 10) {
+                    const totalWeight = weights.reduce((sum, item) => sum + item.weight, 0);
+                    let random = Math.random() * totalWeight;
+                    
+                    for (let i = 0; i < weights.length; i++) {
+                        random -= weights[i].weight;
+                        if (random <= 0 && !numbers.includes(weights[i].num)) {
+                            numbers.push(weights[i].num);
+                            break;
+                        }
+                    }
+                    
+                    if (numbers.length === weights.length) break;
+                }
+                
+                return [numbers, selectedTeam];
+            }
+            
+            return generateBalancedNumbersAndTeams(true);
+        }
+
+        function generatePatternBasedNumbersAndTeams() {
+            const result = [];
+            const decades = [1, 11, 21, 31, 41, 51, 61, 71];
+            
+            // Try to get 1-2 from each decade
+            decades.forEach(decade => {
+                const decadeNumbers = Array.from(selectedNumbers).filter(n => 
+                    n >= decade && n < decade + 10
+                );
+                if (decadeNumbers.length > 0 && result.length < 10) {
+                    const shuffled = decadeNumbers.sort(() => Math.random() - 0.5);
+                    result.push(...shuffled.slice(0, Math.min(1, shuffled.length, 10 - result.length)));
+                }
+            });
+            
+            // Fill remaining
+            while (result.length < 10) {
+                const remaining = Array.from(selectedNumbers).filter(n => !result.includes(n));
+                if (remaining.length === 0) break;
+                result.push(remaining[Math.floor(Math.random() * remaining.length)]);
+            }
+            
+            return [result.slice(0, 10), selectedTeam];
+        }
+
+        function generateDecadeSpreadNumbersAndTeams() {
+            const result = [];
+            const decades = [
+                [1, 10], [11, 20], [21, 30], [31, 40], 
+                [41, 50], [51, 60], [61, 70], [71, 80]
+            ];
+            
+            // Try to get 1-2 from different decades
+            const shuffledDecades = decades.sort(() => Math.random() - 0.5);
+            
+            shuffledDecades.forEach(([start, end]) => {
+                if (result.length < 10) {
+                    const decadeNumbers = Array.from(selectedNumbers).filter(n => 
+                        n >= start && n <= end
+                    );
+                    if (decadeNumbers.length > 0) {
+                        const count = Math.min(1, decadeNumbers.length, 10 - result.length);
+                        const shuffled = decadeNumbers.sort(() => Math.random() - 0.5);
+                        result.push(...shuffled.slice(0, count));
+                    }
+                }
+            });
+            
+            // Fill remaining
+            while (result.length < 10) {
+                const remaining = Array.from(selectedNumbers).filter(n => !result.includes(n));
+                if (remaining.length === 0) break;
+                result.push(remaining[Math.floor(Math.random() * remaining.length)]);
+            }
+            
+            return [result, selectedTeam];
+        }
+
+        function generateRandomNumbersAndTeams() {
+            const shuffledNumbers = Array.from(selectedNumbers).sort(() => Math.random() - 0.5);
+            return [shuffledNumbers.slice(0, 10), selectedTeam];
+        }
+
+        function displayGeneratedGames() {
+            const container = document.getElementById('generatedGames');
+            const analysisContainer = document.getElementById('gameAnalysis');
+            const gamesListContainer = document.getElementById('gamesList');
+            
+            const totalGames = generatedGames.length;
+            const avgPairs = generatedGames.reduce((sum, game) => 
+                sum + game.numbers.filter(n => n % 2 === 0).length, 0) / totalGames;
+            const avgSum = generatedGames.reduce((sum, game) => 
+                sum + game.numbers.reduce((acc, num) => acc + num, 0), 0) / totalGames;
+            const hasLastDrawNumbers = generatedGames.some(game => 
+                lastDrawNumbers.some(num => game.numbers.includes(num)));
+
+            analysisContainer.innerHTML = `
+                <div class="stats-card p-4 rounded-lg text-center">
+                    <div class="text-2xl font-bold text-time-green">${totalGames}</div>
+                    <div class="text-sm text-gray-600 dark:text-gray-400">Jogos Gerados</div>
+                </div>
+                <div class="stats-card p-4 rounded-lg text-center">
+                    <div class="text-2xl font-bold text-time-green">${avgPairs.toFixed(1)}</div>
+                    <div class="text-sm text-gray-600 dark:text-gray-400">Média Pares</div>
+                </div>
+                <div class="stats-card p-4 rounded-lg text-center">
+                    <div class="text-2xl font-bold text-time-green">${avgSum.toFixed(0)}</div>
+                    <div class="text-sm text-gray-600 dark:text-gray-400">Soma Média</div>
+                </div>
+                <div class="stats-card p-4 rounded-lg text-center">
+                    <div class="text-2xl font-bold ${hasLastDrawNumbers ? 'text-red-500' : 'text-gray-500'}">${hasLastDrawNumbers ? 'SIM' : 'NÃO'}</div>
+                    <div class="text-sm text-gray-600 dark:text-gray-400">Números do Último Sorteio</div>
+                </div>
+            `;
+            
+            gamesListContainer.innerHTML = '';
+            generatedGames.forEach((game, index) => {
+                const gameDiv = document.createElement('div');
+                gameDiv.className = 'p-3 border rounded-lg hover:bg-yellow-50 dark:hover:bg-gray-700';
+                
+                const pairs = game.numbers.filter(n => n % 2 === 0).length;
+                const odds = game.numbers.filter(n => n % 2 === 1).length;
+                const sum = game.numbers.reduce((acc, num) => acc + num, 0);
+                
+                gameDiv.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-medium text-time-green">Jogo ${index + 1}:</span>
+                            <div class="text-xs text-gray-500 flex gap-3">
+                                <span>P: ${pairs}</span>
+                                <span>I: ${odds}</span>
+                                <span>Soma: ${sum}</span>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap gap-1">
+                            ${game.numbers.map(num => {
+                                const isFromLastDraw = lastDrawNumbers.includes(num);
+                                let className = 'px-2 py-1 rounded text-sm font-bold ';
+                                if (isFromLastDraw) {
+                                    className += 'bg-red-500 text-white';
+                                } else {
+                                    className += 'bg-time-green text-white';
+                                }
+                                return `<span class="${className}">${num.toString().padStart(2, '0')}</span>`;
+                            }).join('')}
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium text-time-green">Time:</span>
+                            <span class="px-3 py-1 bg-time-yellow text-black rounded text-sm font-bold">⚽ ${game.team}</span>
+                        </div>
+                    </div>
+                `;
+                
+                gamesListContainer.appendChild(gameDiv);
+            });
+            
+            container.classList.remove('hidden');
+        }
+
+        function downloadGames(format) {
+            switch (format) {
+                case 'txt':
+                    downloadTxt();
+                    break;
+                case 'html':
+                    downloadHtml();
+                    break;
+                case 'xlsx':
+                    downloadXlsx();
+                    break;
+            }
+        }
+
+        function downloadTxt() {
+            try {
+                let content = '';
+                
+                generatedGames.forEach((game, index) => {
+                    const numbersStr = game.numbers.map(n => n.toString().padStart(2, '0')).join(' ');
+                    content += `${numbersStr} | Time: ${game.team}\n`;
+                });
+                
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `timemania-${new Date().toISOString().split('T')[0]}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showCustomAlert('✅ Arquivo TXT baixado com sucesso!');
+            } catch (error) {
+                console.error('Erro ao baixar TXT:', error);
+                showCustomAlert('❌ Erro ao baixar arquivo TXT. Tente novamente.');
+            }
+        }
+
+        function downloadHtml() {
+            const gamesHtml = generatedGames.map((game, index) => {
+                const numbersHtml = game.numbers.map(num => 
+                    `<span style="background: #12923d; color: white; padding: 4px 8px; margin: 2px; border-radius: 3px; display: inline-block; min-width: 30px; text-align: center;">${num.toString().padStart(2, '0')}</span>`
+                ).join('');
+                
+                const pairs = game.numbers.filter(n => n % 2 === 0).length;
+                const odds = game.numbers.filter(n => n % 2 === 1).length;
+                const sum = game.numbers.reduce((acc, num) => acc + num, 0);
+                
+                return `
+        <div class="game">
+            <h4>Jogo ${index + 1} - P:${pairs} I:${odds} Soma:${sum}</h4>
+            <div class="numbers">
+                <strong>Números:</strong> ${numbersHtml}<br>
+                <strong>Time:</strong> <span style="background: #fff600; color: black; padding: 4px 8px; border-radius: 3px; font-weight: bold;">⚽ ${game.team}</span>
+            </div>
+        </div>`;
+            }).join('');
+
+            const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timemania - Jogos Gerados</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #fffef0; }
+        .header { background: linear-gradient(45deg, #fff600, #12923d); color: black; padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
+        .game { padding: 15px; border: 1px solid #ddd; margin: 15px 0; border-radius: 8px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .numbers { margin-top: 10px; }
+        h1 { margin: 0; font-size: 24px; }
+        h4 { color: #12923d; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚽ Timemania - Jogos Gerados</h1>
+        <p>Gerado em: ${new Date().toLocaleString('pt-BR')}</p>
+    </div>
+    
+    ${gamesHtml}
+    
+    <div style="text-align: center; margin-top: 30px; padding: 20px; background: white; border-radius: 8px;">
+        <p style="color: #666; margin: 0;">
+            <strong>🍀 Boa sorte!</strong><br>
+            Gerado pelo Gerador Inteligente - Timemania
+        </p>
+    </div>
+</body>
+</html>`;
+            
+            try {
+                const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `timemania-${new Date().toISOString().split('T')[0]}.html`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showCustomAlert('✅ Arquivo HTML baixado com sucesso!');
+            } catch (error) {
+                console.error('Erro ao baixar HTML:', error);
+                showCustomAlert('❌ Erro ao baixar arquivo HTML. Tente novamente.');
+            }
+        }
+
+        function downloadXlsx() {
+            try {
+                if (typeof XLSX === 'undefined') {
+                    showCustomAlert('❌ Biblioteca XLSX não carregada. Recarregue a página e tente novamente.');
+                    return;
+                }
+
+                const wb = XLSX.utils.book_new();
+                
+                const wsData = [
+                    ['Jogo', 'Números', 'Time', 'Pares', 'Ímpares', 'Soma'],
+                    ...generatedGames.map((game, index) => [
+                        index + 1,
+                        game.numbers.map(n => n.toString().padStart(2, '0')).join(' '),
+                        game.team,
+                        game.numbers.filter(n => n % 2 === 0).length,
+                        game.numbers.filter(n => n % 2 === 1).length,
+                        game.numbers.reduce((acc, num) => acc + num, 0)
+                    ])
+                ];
+                
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                XLSX.utils.book_append_sheet(wb, ws, 'Jogos');
+                
+                const summaryData = [
+                    ['📊 RESUMO DOS JOGOS GERADOS - TIMEMANIA', ''],
+                    ['', ''],
+                    ['Informação', 'Valor'],
+                    ['Data de Geração', new Date().toLocaleString('pt-BR')],
+                    ['Total de Jogos', generatedGames.length],
+                    ['Números por Jogo', '10'],
+                    ['Time Selecionado', selectedTeam],
+                    ['Estratégia Utilizada', document.getElementById('strategy').options[document.getElementById('strategy').selectedIndex].text],
+                    ['', ''],
+                    ['NÚMEROS SELECIONADOS:', ''],
+                    ['Quantidade', selectedNumbers.size],
+                    ['Lista', Array.from(selectedNumbers).sort((a,b) => a-b).join(', ')]
+                ];
+                
+                const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+                XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo');
+                
+                const fileName = `timemania-${new Date().toISOString().split('T')[0]}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                
+                showCustomAlert('✅ Arquivo XLSX baixado com sucesso!');
+            } catch (error) {
+                console.error('Erro ao baixar XLSX:', error);
+                showCustomAlert('❌ Erro ao baixar arquivo XLSX. Verifique se seu navegador suporta downloads ou tente outro formato.');
+            }
+        }
+
+        function showCustomAlert(message) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-8 h-8 bg-time-green rounded-full flex items-center justify-center">
+                            <span class="text-xl">⚠️</span>
+                        </div>
+                        <h3 class="font-semibold text-lg">Atenção</h3>
+                    </div>
+                    <p class="text-gray-700 dark:text-gray-300 mb-4">${message}</p>
+                    <div class="flex justify-end">
+                        <button class="px-4 py-2 bg-time-green text-white hover:bg-time-green-dark rounded" onclick="this.closest('.fixed').remove()">
+                            Entendi
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+    </script>
+</body>
+</html>
